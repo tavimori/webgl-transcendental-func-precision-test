@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>GPU sin/cos Full-Range Precision Test</title>
+    <style>
+        :root {
+            --bg: #101316;
+            --panel: #1b2229;
+            --text: #e7edf3;
+            --muted: #9badbd;
+            --ok: #4ade80;
+            --bad: #f87171;
+            --warn: #fbbf24;
+            --border: #2c3742;
+            --accent: #60a5fa;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            padding: 24px;
+            background: var(--bg);
+            color: var(--text);
+            font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        h1 { margin: 0 0 8px; font-size: 24px; }
+        h2 { margin: 24px 0 8px; font-size: 18px; }
+        h3 { margin: 16px 0 6px; font-size: 15px; color: var(--accent); }
+        p { margin: 6px 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
+
+        .panel {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px 14px;
+            margin: 10px 0;
+        }
+
+        .mono {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace;
+            font-size: 12px;
+        }
+
+        .ok { color: var(--ok); }
+        .bad { color: var(--bad); }
+        .warn { color: var(--warn); }
+        .accent { color: var(--accent); }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: end;
+        }
+
+        .controls label {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            font-size: 13px;
+            color: var(--muted);
+        }
+
+        .controls select, .controls input {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text);
+            padding: 6px 8px;
+            font-family: inherit;
+            font-size: 13px;
+        }
+
+        button.run {
+            background: var(--accent);
+            color: #000;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 18px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        button.run:hover { opacity: 0.85; }
+        button.run:disabled { opacity: 0.4; cursor: default; }
+
+        .progress {
+            width: 100%;
+            height: 6px;
+            background: var(--border);
+            border-radius: 3px;
+            overflow: hidden;
+            margin: 8px 0;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: var(--accent);
+            transition: width 0.15s;
+            width: 0%;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 8px;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        th, td {
+            border-bottom: 1px solid var(--border);
+            padding: 5px 8px;
+            text-align: right;
+            white-space: nowrap;
+            font-size: 11px;
+        }
+
+        th {
+            position: sticky;
+            top: 0;
+            background: #26303a;
+            z-index: 1;
+            font-size: 11px;
+        }
+
+        tr.violation { background: rgba(248, 113, 113, 0.12); }
+
+        .table-wrap {
+            overflow: auto;
+            max-height: 50vh;
+            border-radius: 8px;
+        }
+
+        .metric {
+            display: grid;
+            grid-template-columns: 240px 1fr;
+            gap: 4px 16px;
+            font-size: 13px;
+            line-height: 1.7;
+        }
+
+        .metric dt { color: var(--muted); }
+
+        .metric dd {
+            margin: 0;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace;
+            font-size: 12px;
+            word-break: break-all;
+        }
+
+        details {
+            margin: 8px 0;
+        }
+
+        details > summary {
+            cursor: pointer;
+            font-size: 14px;
+            color: var(--accent);
+            padding: 6px 0;
+        }
+
+        .hero {
+            border-radius: 12px;
+            margin: 10px 0;
+            padding: 14px 16px;
+            border: 1px solid;
+        }
+
+        .hero.problem {
+            background: rgba(248, 113, 113, 0.1);
+            border: 1px solid rgba(248, 113, 113, 0.3);
+            color: var(--bad);
+        }
+
+        .hero.good {
+            background: rgba(74, 222, 128, 0.1);
+            border: 1px solid rgba(74, 222, 128, 0.3);
+            color: var(--ok);
+        }
+
+        .hero-title {
+            font-size: 14px;
+            color: var(--muted);
+            margin-bottom: 8px;
+        }
+
+        .hero-value {
+            font-weight: 800;
+            line-height: 1.05;
+            font-size: clamp(34px, 11vw, 56px);
+            letter-spacing: -0.03em;
+        }
+
+        .hero-subtitle {
+            margin-top: 8px;
+            font-size: 15px;
+            color: var(--text);
+        }
+
+        .hero-meta {
+            margin-top: 6px;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        @media (max-width: 600px) {
+            body { padding: 12px; }
+
+            .metric {
+                grid-template-columns: 1fr;
+                gap: 2px 8px;
+            }
+
+            .metric dt {
+                margin-top: 6px;
+                font-size: 12px;
+            }
+
+            .metric dd {
+                font-size: 12px;
+            }
+
+            h1 { font-size: 20px; }
+            p { font-size: 13px; }
+        }
+    </style>
+</head>
+<body>
+<h1>GPU sin/cos Full-Range Precision Test</h1>
+<p>
+    Press <b>Run All Analyses</b> to test both direct GPU <code>sin/cos</code> and refined <code>exp</code>-algebraic paths.
+    The main output is the worst-case Earth-surface error in meters.
+</p>
+<details>
+    <summary>Sampling details</summary>
+    <div class="panel">
+        <p>
+            Step size = 2&pi; / (2<sup>zoom</sup> &times; tileRes). At z=13, tileRes=512:
+            2&pi;/2<sup>22</sup> &approx; 1.50 &times; 10<sup>-6</sup> rad &approx; 9.5 m.
+        </p>
+    </div>
+</details>
+
+<div class="panel">
+    <div class="controls">
+        <label>Tile zoom
+            <select id="zoom">
+                <option value="10">z = 10 (524 K)</option>
+                <option value="11">z = 11 (1.0 M)</option>
+                <option value="12">z = 12 (2.1 M)</option>
+                <option value="13" selected>z = 13 (4.2 M)</option>
+                <option value="14">z = 14 (8.4 M)</option>
+            </select>
+        </label>
+        <label>Tile resolution
+            <select id="tileres">
+                <option value="256">256</option>
+                <option value="512" selected>512</option>
+                <option value="1024">1024</option>
+            </select>
+        </label>
+        <label>GLSL precision
+            <select id="precision">
+                <option value="highp" selected>highp</option>
+                <option value="mediump">mediump</option>
+            </select>
+        </label>
+        <button class="run" id="runBtn" onclick="runTest()">Run All Analyses</button>
+    </div>
+    <div class="progress"><div class="progress-bar" id="progressBar"></div></div>
+    <div id="status" class="mono" style="color:var(--muted);font-size:13px;">Ready. Click &ldquo;Run All Analyses&rdquo; to start.</div>
+</div>
+
+<div id="gpu-info" class="panel mono" style="display:none;"></div>
+<div id="results"></div>
+
+<script>
+const EARTH_RADIUS = 6_371_000;
+const PI = Math.PI;
+const VISUAL_OK_METERS = 5;
+
+function toSci(v, d) {
+    return Number.isFinite(v) ? v.toExponential(d !== undefined ? d : 8) : 'n/a';
+}
+
+function setProgress(pct) {
+    document.getElementById('progressBar').style.width = pct + '%';
+}
+
+function setStatus(msg) {
+    document.getElementById('status').textContent = msg;
+}
+
+function getGL() {
+    const c = document.createElement('canvas');
+    c.width = c.height = 1;
+    const gl = c.getContext('webgl2', {antialias: false});
+    if (!gl) throw new Error('WebGL2 not available.');
+    return gl;
+}
+
+function getGPUInfo(gl) {
+    const ext = gl.getExtension('WEBGL_debug_renderer_info');
+    return {
+        vendor: ext ? gl.getParameter(ext.UNMASKED_VENDOR_WEBGL) : gl.getParameter(gl.VENDOR),
+        renderer: ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER),
+    };
+}
+
+function createProgram(gl, vertSrc, fragSrc, varyings, tfMode) {
+    const vs = gl.createShader(gl.VERTEX_SHADER);
+    gl.shaderSource(vs, vertSrc);
+    gl.compileShader(vs);
+    if (!gl.getShaderParameter(vs, gl.COMPILE_STATUS))
+        throw new Error('Vertex shader:\n' + gl.getShaderInfoLog(vs));
+
+    const fs = gl.createShader(gl.FRAGMENT_SHADER);
+    gl.shaderSource(fs, fragSrc);
+    gl.compileShader(fs);
+    if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS))
+        throw new Error('Fragment shader:\n' + gl.getShaderInfoLog(fs));
+
+    const prog = gl.createProgram();
+    gl.attachShader(prog, vs);
+    gl.attachShader(prog, fs);
+    gl.transformFeedbackVaryings(prog, varyings, tfMode);
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS))
+        throw new Error('Link:\n' + gl.getProgramInfoLog(prog));
+    return prog;
+}
+
+async function runTest() {
+    const btn = document.getElementById('runBtn');
+    btn.disabled = true;
+    document.getElementById('results').innerHTML = '';
+    setProgress(0);
+    setStatus('Initializing...');
+
+    try {
+        const zoom = +document.getElementById('zoom').value;
+        const tileRes = +document.getElementById('tileres').value;
+        const precision = document.getElementById('precision').value;
+
+        const totalSteps = (1 << zoom) * tileRes;
+        const numSamples = totalSteps + 1;
+        const angleStep = (2 * PI) / totalSteps;
+        const stepMeters = angleStep * EARTH_RADIUS;
+
+        const gl = getGL();
+
+        const info = getGPUInfo(gl);
+        const gpuDiv = document.getElementById('gpu-info');
+        gpuDiv.style.display = 'block';
+        gpuDiv.innerHTML = `GPU: <b>${info.renderer}</b> &nbsp;|&nbsp; Vendor: ${info.vendor}`;
+
+        setStatus(`Preparing ${numSamples.toLocaleString()} samples...`);
+        await sleep(10);
+
+        const angles = new Float32Array(numSamples);
+        const mercYs = new Float32Array(numSamples);
+        const mercStep = 1 / totalSteps;
+        for (let i = 0; i < numSamples; i++) {
+            angles[i] = i * angleStep;
+            mercYs[i] = i * mercStep;
+        }
+
+        const trig = await runTrigTest(gl, angles, numSamples, precision);
+        setProgress(50);
+
+        const expPath = await runExpTest(gl, mercYs, numSamples, precision);
+        setProgress(75);
+
+        setStatus('Analyzing sin(x)...');
+        await sleep(10);
+        const sinResult = await analyze(angles, trig.gpuSin, numSamples, 'sin');
+
+        setStatus('Analyzing cos(x)...');
+        await sleep(10);
+        const cosResult = await analyze(angles, trig.gpuCos, numSamples, 'cos');
+
+        setStatus('Analyzing exp-algebraic path...');
+        await sleep(10);
+        const expResult = await analyzeExpPath(mercYs, expPath.gpuT, expPath.gpuSinAlg, expPath.gpuCosAlg, numSamples);
+
+        setStatus(`Done. ${numSamples.toLocaleString()} samples analyzed for sin/cos and exp path.`);
+        setProgress(100);
+
+        const trigHtml = displayResults(
+            sinResult, cosResult, numSamples, angleStep, stepMeters, zoom, tileRes, precision, info,
+            {
+                title: 'Direct GLSL sin/cos Path',
+                rangeLabel: '[0, 2π]',
+                stepLabel: 'Angle step',
+                stepUnit: 'rad',
+                detailLabel: 'An error ε in sin/cos translates to ~ε × R metres of positional error on the globe (R = 6 371 000 m).',
+                valuePrefix: 'Worst-case Earth-surface error',
+                xLabel: 'x',
+                xSecondary: true,
+                reportPrefix: 'Advanced'
+            }
+        );
+
+        const expHtml = displayExpHero(expResult, numSamples, mercStep, zoom, tileRes, precision, info);
+
+        const expDetailsHtml = buildExpDetails(expResult);
+        document.getElementById('results').innerHTML = trigHtml + expHtml + expDetailsHtml;
+
+    } catch (e) {
+        setStatus('Error: ' + (e.message || String(e)));
+        console.error(e);
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function runTrigTest(gl, angles, numSamples, precision) {
+    const gpuSin = new Float32Array(numSamples);
+    const gpuCos = new Float32Array(numSamples);
+
+    const vert = `#version 300 es
+precision ${precision} float;
+in float a_angle;
+out float v_sin;
+out float v_cos;
+void main() {
+    v_sin = sin(a_angle);
+    v_cos = cos(a_angle);
+    gl_Position = vec4(0.0, 0.0, 0.0, 1.0);
+    gl_PointSize = 1.0;
+}`;
+    const frag = `#version 300 es
+precision ${precision} float;
+out vec4 fragColor;
+void main() { fragColor = vec4(0.0); }`;
+
+    const prog = createProgram(gl, vert, frag, ['v_sin', 'v_cos'], gl.INTERLEAVED_ATTRIBS);
+    gl.useProgram(prog);
+    const aLoc = gl.getAttribLocation(prog, 'a_angle');
+
+    const BATCH = 1 << 18;
+    const numBatches = Math.ceil(numSamples / BATCH);
+
+    for (let b = 0; b < numBatches; b++) {
+        const off = b * BATCH;
+        const cnt = Math.min(BATCH, numSamples - off);
+
+        setStatus(`sin/cos GPU batch ${b + 1}/${numBatches} (${off.toLocaleString()} .. ${(off + cnt - 1).toLocaleString()})...`);
+
+        const inBuf = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, inBuf);
+        gl.bufferData(gl.ARRAY_BUFFER, angles.subarray(off, off + cnt), gl.STATIC_DRAW);
+        gl.enableVertexAttribArray(aLoc);
+        gl.vertexAttribPointer(aLoc, 1, gl.FLOAT, false, 0, 0);
+
+        const outBuf = gl.createBuffer();
+        gl.bindBuffer(gl.TRANSFORM_FEEDBACK_BUFFER, outBuf);
+        gl.bufferData(gl.TRANSFORM_FEEDBACK_BUFFER, cnt * 8, gl.STATIC_READ);
+        gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, outBuf);
+
+        gl.enable(gl.RASTERIZER_DISCARD);
+        gl.beginTransformFeedback(gl.POINTS);
+        gl.drawArrays(gl.POINTS, 0, cnt);
+        gl.endTransformFeedback();
+        gl.disable(gl.RASTERIZER_DISCARD);
+
+        const buf = new Float32Array(cnt * 2);
+        gl.getBufferSubData(gl.TRANSFORM_FEEDBACK_BUFFER, 0, buf);
+
+        for (let i = 0; i < cnt; i++) {
+            gpuSin[off + i] = buf[i * 2];
+            gpuCos[off + i] = buf[i * 2 + 1];
+        }
+
+        gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, null);
+        gl.deleteBuffer(inBuf);
+        gl.deleteBuffer(outBuf);
+
+        setProgress(((b + 1) / numBatches * 50) | 0);
+        await sleep(0);
+    }
+
+    return {gpuSin, gpuCos};
+}
+
+async function runExpTest(gl, mercYs, numSamples, precision) {
+    const gpuT = new Float32Array(numSamples);
+    const gpuSinAlg = new Float32Array(numSamples);
+    const gpuCosAlg = new Float32Array(numSamples);
+
+    const vert = `#version 300 es
+precision ${precision} float;
+const float PI = 3.141592653589793;
+in float a_merc_y;
+out float v_t;
+out float v_sin_alg;
+out float v_cos_alg;
+void main() {
+    float t = exp(PI - a_merc_y * 2.0 * PI);
+    float t2 = t * t;
+    float denom = t2 + 1.0;
+    v_t = t;
+    v_sin_alg = (t2 - 1.0) / denom;
+    v_cos_alg = (2.0 * t) / denom;
+    gl_Position = vec4(0.0, 0.0, 0.0, 1.0);
+    gl_PointSize = 1.0;
+}`;
+    const frag = `#version 300 es
+precision ${precision} float;
+out vec4 fragColor;
+void main() { fragColor = vec4(0.0); }`;
+
+    const prog = createProgram(gl, vert, frag, ['v_t', 'v_sin_alg', 'v_cos_alg'], gl.INTERLEAVED_ATTRIBS);
+    gl.useProgram(prog);
+    const aLoc = gl.getAttribLocation(prog, 'a_merc_y');
+
+    const BATCH = 1 << 18;
+    const numBatches = Math.ceil(numSamples / BATCH);
+
+    for (let b = 0; b < numBatches; b++) {
+        const off = b * BATCH;
+        const cnt = Math.min(BATCH, numSamples - off);
+
+        setStatus(`exp GPU batch ${b + 1}/${numBatches} (${off.toLocaleString()} .. ${(off + cnt - 1).toLocaleString()})...`);
+
+        const inBuf = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, inBuf);
+        gl.bufferData(gl.ARRAY_BUFFER, mercYs.subarray(off, off + cnt), gl.STATIC_DRAW);
+        gl.enableVertexAttribArray(aLoc);
+        gl.vertexAttribPointer(aLoc, 1, gl.FLOAT, false, 0, 0);
+
+        const outBuf = gl.createBuffer();
+        gl.bindBuffer(gl.TRANSFORM_FEEDBACK_BUFFER, outBuf);
+        gl.bufferData(gl.TRANSFORM_FEEDBACK_BUFFER, cnt * 12, gl.STATIC_READ);
+        gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, outBuf);
+
+        gl.enable(gl.RASTERIZER_DISCARD);
+        gl.beginTransformFeedback(gl.POINTS);
+        gl.drawArrays(gl.POINTS, 0, cnt);
+        gl.endTransformFeedback();
+        gl.disable(gl.RASTERIZER_DISCARD);
+
+        const buf = new Float32Array(cnt * 3);
+        gl.getBufferSubData(gl.TRANSFORM_FEEDBACK_BUFFER, 0, buf);
+
+        for (let i = 0; i < cnt; i++) {
+            gpuT[off + i] = buf[i * 3];
+            gpuSinAlg[off + i] = buf[i * 3 + 1];
+            gpuCosAlg[off + i] = buf[i * 3 + 2];
+        }
+
+        gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, null);
+        gl.deleteBuffer(inBuf);
+        gl.deleteBuffer(outBuf);
+
+        setProgress(50 + (((b + 1) / numBatches * 25) | 0));
+        await sleep(0);
+    }
+
+    return {gpuT, gpuSinAlg, gpuCosAlg};
+}
+
+async function analyzeExpPath(mercYs, gpuT, gpuSinAlg, gpuCosAlg, n) {
+    const tResult = await analyzeWithCpuFn(mercYs, gpuT, n, 'exp_t', (x) => Math.exp(PI - x * 2 * PI));
+    const sinAlgResult = await analyzeWithCpuFn(mercYs, gpuSinAlg, n, 'sin_alg(exp)', (x) => {
+        const t = Math.exp(PI - x * 2 * PI);
+        const t2 = t * t;
+        const denom = t2 + 1;
+        return (t2 - 1) / denom;
+    });
+    const cosAlgResult = await analyzeWithCpuFn(mercYs, gpuCosAlg, n, 'cos_alg(exp)', (x) => {
+        const t = Math.exp(PI - x * 2 * PI);
+        const t2 = t * t;
+        const denom = t2 + 1;
+        return (2 * t) / denom;
+    });
+
+    const worstOfSinCosResult = sinAlgResult.maxErr >= cosAlgResult.maxErr ? sinAlgResult : cosAlgResult;
+    return {tResult, sinAlgResult, cosAlgResult, worstOfSinCosResult};
+}
+
+function sleep(ms) {
+    return new Promise(r => setTimeout(r, ms));
+}
+
+async function analyzeWithCpuFn(xs, gpuVals, n, fnName, cpuFn) {
+    const r = {
+        fnName,
+        maxErr: 0,
+        maxErrIdx: -1,
+        maxErrX: 0,
+        maxErrGpu: 0,
+        maxErrCpu: 0,
+        breaks: [],
+        breakCount: 0,
+        dupCount: 0,
+        maxStepBack: 0,
+    };
+
+    let prevCpu = cpuFn(xs[0]);
+
+    {
+        const err = Math.abs(gpuVals[0] - prevCpu);
+        if (err > r.maxErr) {
+            r.maxErr = err;
+            r.maxErrIdx = 0;
+        }
+    }
+
+    for (let i = 1; i < n; i++) {
+        const cpu = cpuFn(xs[i]);
+        const err = Math.abs(gpuVals[i] - cpu);
+
+        if (err > r.maxErr) {
+            r.maxErr = err;
+            r.maxErrIdx = i;
+        }
+
+        const expectedDir = Math.sign(cpu - prevCpu);
+        const gpuDelta = gpuVals[i] - gpuVals[i - 1];
+        const gpuDir = Math.sign(gpuDelta);
+
+        if (gpuDelta === 0 && expectedDir !== 0) {
+            r.dupCount++;
+        }
+
+        if (expectedDir !== 0 && gpuDir !== 0 && gpuDir !== expectedDir) {
+            r.breakCount++;
+            const sb = Math.abs(gpuDelta);
+            if (sb > r.maxStepBack) r.maxStepBack = sb;
+
+            if (r.breaks.length < 5000) {
+                r.breaks.push({
+                    idx: i,
+                    x: xs[i],
+                    xPrev: xs[i - 1],
+                    gpuPrev: gpuVals[i - 1],
+                    gpuCur: gpuVals[i],
+                    cpuPrev: prevCpu,
+                    cpuCur: cpu,
+                    stepBack: sb,
+                });
+            }
+        }
+
+        prevCpu = cpu;
+
+        if (i % 500000 === 0) {
+            setStatus(`Analyzing ${r.fnName}... ${((i / n) * 100) | 0}%`);
+            await sleep(0);
+        }
+    }
+
+    r.breaks.sort((a, b) => b.stepBack - a.stepBack);
+
+    if (r.maxErrIdx >= 0) {
+        r.maxErrX = xs[r.maxErrIdx];
+        r.maxErrGpu = gpuVals[r.maxErrIdx];
+        r.maxErrCpu = cpuFn(xs[r.maxErrIdx]);
+    }
+
+    return r;
+}
+
+async function analyze(angles, gpuVals, n, fnName) {
+    const cpuFn = fnName === 'sin' ? Math.sin : Math.cos;
+    return analyzeWithCpuFn(angles, gpuVals, n, fnName, cpuFn);
+}
+
+function displayResults(channelAR, channelBR, numSamples, stepValue, stepMeters, zoom, tileRes, precision, gpuInfo, options) {
+    const opts = options || {};
+    const title = opts.title || 'Result';
+    const rangeLabel = opts.rangeLabel || '[0, 2π]';
+    const stepLabel = opts.stepLabel || 'Step';
+    const stepUnit = opts.stepUnit || '';
+    const detailLabel = opts.detailLabel || 'An error ε in sin/cos translates to ~ε × R metres of positional error on the globe (R = 6 371 000 m).';
+    const valuePrefix = opts.valuePrefix || 'Worst-case Earth-surface error';
+    const reportPrefix = opts.reportPrefix || 'Advanced';
+    const xLabel = opts.xLabel || 'x';
+    const xSecondary = opts.xSecondary !== false;
+    const metricALabel = opts.metricALabel || channelAR.fnName;
+    const metricBLabel = opts.metricBLabel || channelBR.fnName;
+
+    const R = EARTH_RADIUS;
+    const worstErr = Math.max(channelAR.maxErr, channelBR.maxErr);
+    const worstStepBack = Math.max(channelAR.maxStepBack, channelBR.maxStepBack);
+    const earthPrecision = Math.max(worstErr, worstStepBack) * R;
+    const aErrMeters = channelAR.maxErr * R;
+    const bErrMeters = channelBR.maxErr * R;
+    const aStepBackMeters = channelAR.maxStepBack * R;
+    const bStepBackMeters = channelBR.maxStepBack * R;
+
+    let html = '';
+    html += `<div class="panel"><h2>${title}</h2></div>`;
+
+    // Main user-facing result
+    const hasProblems = earthPrecision > VISUAL_OK_METERS;
+    html += `<div class="hero ${hasProblems ? 'problem' : 'good'}">`;
+    html += `<div class="hero-title">${valuePrefix}</div>`;
+    html += `<div class="hero-value">${earthPrecision.toFixed(3)} m</div>`;
+    if (hasProblems) {
+        html += `<div class="hero-subtitle">&#9888; Above visual threshold (${VISUAL_OK_METERS} m)</div>`;
+    } else {
+        html += `<div class="hero-subtitle">&#10003; Visually fine (within ${VISUAL_OK_METERS} m threshold)</div>`;
+    }
+    if (gpuInfo && gpuInfo.renderer) {
+        html += `<div class="hero-meta">GPU: ${gpuInfo.renderer}</div>`;
+    }
+    html += `</div>`;
+
+    // Parameters (advanced)
+    html += `<details>
+        <summary>Advanced: Test Parameters</summary>
+        <div class="panel">
+        <h2>Test Parameters</h2>
+        <dl class="metric">
+            <dt>Range</dt><dd>${rangeLabel}</dd>
+            <dt>Zoom level</dt><dd>z = ${zoom}</dd>
+            <dt>Tile resolution</dt><dd>${tileRes} px</dd>
+            <dt>GLSL precision qualifier</dt><dd>${precision}</dd>
+            <dt>Total samples</dt><dd>${numSamples.toLocaleString()}</dd>
+            <dt>${stepLabel}</dt><dd>${toSci(stepValue)} ${stepUnit}</dd>
+            <dt>Step &asymp; Earth surface</dt><dd>${stepMeters.toFixed(3)} m</dd>
+        </dl>
+    </div>
+    </details>`;
+
+    // Overall Earth precision (advanced)
+    html += `<details>
+        <summary>Advanced: Earth-Surface Precision Breakdown</summary>
+        <div class="panel">
+        <h2>Earth-Surface Precision Summary</h2>
+        <p style="color:var(--text);font-size:13px;margin-bottom:10px;">
+            ${detailLabel}
+        </p>
+        <dl class="metric">
+            <dt>Worst |${metricALabel} error| &times; R</dt>
+            <dd class="${aErrMeters > VISUAL_OK_METERS ? 'bad' : 'ok'}">
+                ${aErrMeters.toFixed(3)} m
+            </dd>
+            <dt>Worst |${metricBLabel} error| &times; R</dt>
+            <dd class="${bErrMeters > VISUAL_OK_METERS ? 'bad' : 'ok'}">
+                ${bErrMeters.toFixed(3)} m
+            </dd>
+            <dt>Worst ${metricALabel} step-back &times; R</dt>
+            <dd class="${aStepBackMeters > VISUAL_OK_METERS ? 'bad' : 'ok'}">
+                ${aStepBackMeters.toFixed(3)} m
+            </dd>
+            <dt>Worst ${metricBLabel} step-back &times; R</dt>
+            <dd class="${bStepBackMeters > VISUAL_OK_METERS ? 'bad' : 'ok'}">
+                ${bStepBackMeters.toFixed(3)} m
+            </dd>
+            <dt><b>Overall GPU Earth precision</b></dt>
+            <dd><b class="${earthPrecision > VISUAL_OK_METERS ? 'bad' : 'ok'}">
+                ${earthPrecision.toFixed(3)} m
+            </b></dd>
+        </dl>
+    </div>
+    </details>`;
+
+    html += buildFnReport(channelAR, R, {reportPrefix, xLabel, xSecondary});
+    html += buildFnReport(channelBR, R, {reportPrefix, xLabel, xSecondary});
+    return html;
+}
+
+function buildFnReport(r, R, opts) {
+    const options = opts || {};
+    const reportPrefix = options.reportPrefix || 'Advanced';
+    const xLabel = options.xLabel || 'x';
+    const xSecondary = options.xSecondary !== false;
+    const noMeters = !!options.noMeters;
+    const maxErrMeters = r.maxErr * R;
+    const maxStepBackMeters = r.maxStepBack * R;
+    const maxErrX = r.maxErrX !== undefined ? r.maxErrX : r.maxErrAngle;
+
+    const errClass = noMeters ? '' : (maxErrMeters > VISUAL_OK_METERS ? 'bad' : 'ok');
+    const sbClass = noMeters ? '' : (maxStepBackMeters > VISUAL_OK_METERS ? 'bad' : 'ok');
+
+    let html = `<details>
+        <summary>${reportPrefix}: ${r.fnName} Detailed Analysis</summary>
+        <div class="panel">
+        <h2>${r.fnName} &mdash; Detailed Analysis</h2>
+        ${noMeters ? '<p style="color:var(--muted);font-size:12px;">This is an intermediate value. Raw errors are shown without metre conversion.</p>' : ''}
+        <dl class="metric">
+            <dt>Max |error| vs CPU f64</dt>
+            <dd class="${errClass}">
+                ${toSci(r.maxErr)}
+                ${noMeters ? '' : `&nbsp;&rarr;&nbsp; <b>${maxErrMeters.toFixed(3)} m</b>`}
+                &nbsp; at ${xLabel} = ${toSci(maxErrX, 10)}
+                ${xSecondary ? ` (${(maxErrX / PI).toFixed(8)}&pi;)` : ''}
+            </dd>
+            <dt>GPU value at max error</dt>
+            <dd>${toSci(r.maxErrGpu, 12)}</dd>
+            <dt>CPU value at max error</dt>
+            <dd>${toSci(r.maxErrCpu, 12)}</dd>
+            <dt>Monotonicity violations (step-backs)</dt>
+            <dd class="${sbClass}">${r.breakCount.toLocaleString()}</dd>
+            <dt>Max step-back magnitude</dt>
+            <dd class="${sbClass}">
+                ${toSci(r.maxStepBack)}
+                ${noMeters ? '' : `&nbsp;&rarr;&nbsp; <b>${maxStepBackMeters.toFixed(3)} m</b>`}
+            </dd>
+            <dt>Duplicate values (plateau)</dt>
+            <dd class="${r.dupCount > 0 ? 'warn' : 'ok'}">${r.dupCount.toLocaleString()}</dd>
+        </dl>`;
+
+    if (r.breaks.length > 0) {
+        const show = r.breaks.slice(0, 30);
+        html += `<h3>Worst monotonicity violations (top ${show.length} of ${r.breakCount.toLocaleString()})</h3>
+        <div class="table-wrap">
+            <table class="mono">
+                <thead><tr>
+                    <th>#</th>
+                    <th>sample idx</th>
+                    <th>${xLabel}</th>
+                    <th>${xLabel} / &pi;</th>
+                    <th>GPU[i&minus;1]</th>
+                    <th>GPU[i]</th>
+                    <th>CPU[i&minus;1]</th>
+                    <th>CPU[i]</th>
+                    <th>step back</th>
+                    ${noMeters ? '' : '<th>meters</th>'}
+                </tr></thead>
+                <tbody>`;
+
+        for (let j = 0; j < show.length; j++) {
+            const b = show[j];
+            const bx = b.x !== undefined ? b.x : b.angle;
+            html += `<tr class="violation">
+                <td style="text-align:center">${j + 1}</td>
+                <td>${b.idx.toLocaleString()}</td>
+                <td>${toSci(bx, 8)}</td>
+                <td>${xSecondary ? (bx / PI).toFixed(8) : '-'}</td>
+                <td>${toSci(b.gpuPrev, 10)}</td>
+                <td>${toSci(b.gpuCur, 10)}</td>
+                <td>${toSci(b.cpuPrev, 10)}</td>
+                <td>${toSci(b.cpuCur, 10)}</td>
+                <td>${toSci(b.stepBack)}</td>
+                ${noMeters ? '' : `<td>${(b.stepBack * R).toFixed(3)}</td>`}
+            </tr>`;
+        }
+
+        html += `</tbody></table></div>`;
+    }
+
+    html += `</div></details>`;
+    return html;
+}
+
+function displayExpHero(expResult, numSamples, mercStep, zoom, tileRes, precision, gpuInfo) {
+    const R = EARTH_RADIUS;
+    const sinR = expResult.sinAlgResult;
+    const cosR = expResult.cosAlgResult;
+    const tR = expResult.tResult;
+
+    const worstSinCosErr = Math.max(sinR.maxErr, cosR.maxErr);
+    const worstSinCosStepBack = Math.max(sinR.maxStepBack, cosR.maxStepBack);
+    const earthPrecision = Math.max(worstSinCosErr, worstSinCosStepBack) * R;
+
+    let html = '';
+    html += `<div class="panel"><h2>Refined exp() Algebraic Path</h2></div>`;
+
+    const hasProblems = earthPrecision > VISUAL_OK_METERS;
+    html += `<div class="hero ${hasProblems ? 'problem' : 'good'}">`;
+    html += `<div class="hero-title">Worst-case Earth-surface error (exp path)</div>`;
+    html += `<div class="hero-value">${earthPrecision.toFixed(3)} m</div>`;
+    if (hasProblems) {
+        html += `<div class="hero-subtitle">&#9888; Above visual threshold (${VISUAL_OK_METERS} m)</div>`;
+    } else {
+        html += `<div class="hero-subtitle">&#10003; Visually fine (within ${VISUAL_OK_METERS} m threshold)</div>`;
+    }
+    if (gpuInfo && gpuInfo.renderer) {
+        html += `<div class="hero-meta">GPU: ${gpuInfo.renderer}</div>`;
+    }
+    html += `</div>`;
+
+    html += `<details>
+        <summary>Advanced: exp path Precision Breakdown</summary>
+        <div class="panel">
+        <h2>exp() Algebraic Path Precision Summary</h2>
+        <p style="color:var(--text);font-size:13px;margin-bottom:10px;">
+            sin_alg and cos_alg are unit-sphere coordinates; their errors map to ε &times; R metres.<br>
+            exp_t is an intermediate value; its raw error is shown without metre conversion.
+        </p>
+        <dl class="metric">
+            <dt>Worst |sin_alg(exp) error| &times; R</dt>
+            <dd class="${sinR.maxErr * R > VISUAL_OK_METERS ? 'bad' : 'ok'}">
+                ${(sinR.maxErr * R).toFixed(3)} m
+            </dd>
+            <dt>Worst |cos_alg(exp) error| &times; R</dt>
+            <dd class="${cosR.maxErr * R > VISUAL_OK_METERS ? 'bad' : 'ok'}">
+                ${(cosR.maxErr * R).toFixed(3)} m
+            </dd>
+            <dt>Worst sin_alg step-back &times; R</dt>
+            <dd class="${sinR.maxStepBack * R > VISUAL_OK_METERS ? 'bad' : 'ok'}">
+                ${(sinR.maxStepBack * R).toFixed(3)} m
+            </dd>
+            <dt>Worst cos_alg step-back &times; R</dt>
+            <dd class="${cosR.maxStepBack * R > VISUAL_OK_METERS ? 'bad' : 'ok'}">
+                ${(cosR.maxStepBack * R).toFixed(3)} m
+            </dd>
+            <dt>Worst |exp_t error| (raw, not metres)</dt>
+            <dd>${toSci(tR.maxErr)}</dd>
+            <dt><b>Overall exp-path Earth precision</b></dt>
+            <dd><b class="${earthPrecision > VISUAL_OK_METERS ? 'bad' : 'ok'}">
+                ${earthPrecision.toFixed(3)} m
+            </b></dd>
+        </dl>
+    </div>
+    </details>`;
+
+    html += `<details>
+        <summary>Advanced: exp path Test Parameters</summary>
+        <div class="panel">
+        <dl class="metric">
+            <dt>Range</dt><dd>mercator_y &isin; [0, 1]</dd>
+            <dt>Zoom level</dt><dd>z = ${zoom}</dd>
+            <dt>Tile resolution</dt><dd>${tileRes} px</dd>
+            <dt>GLSL precision qualifier</dt><dd>${precision}</dd>
+            <dt>Total samples</dt><dd>${numSamples.toLocaleString()}</dd>
+            <dt>mercator_y step</dt><dd>${toSci(mercStep)}</dd>
+            <dt>Step &asymp; Earth surface</dt><dd>${(mercStep * R).toFixed(3)} m</dd>
+        </dl>
+    </div>
+    </details>`;
+
+    return html;
+}
+
+function buildExpDetails(expResult) {
+    const R = EARTH_RADIUS;
+    const opts = {reportPrefix: 'Advanced exp path', xLabel: 'mercator_y', xSecondary: false};
+    let html = '';
+
+    html += buildFnReport(expResult.tResult, R, {
+        ...opts,
+        noMeters: true,
+    });
+    html += buildFnReport(expResult.sinAlgResult, R, opts);
+    html += buildFnReport(expResult.cosAlgResult, R, opts);
+    return html;
+}
+
+</script>
+</body>
+</html>
