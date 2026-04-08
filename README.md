@@ -1,9 +1,11 @@
-# GPU sin/cos Precision Test (Cloudflare Workers + D1)
+# WebGL Transcendental Function Precision Test (Cloudflare Workers + D1)
 
-This project rewrites the original single-page benchmark into a modular app:
+This project benchmarks GPU precision of WebGL transcendental functions used in web map globe
+rendering. It evaluates `sin`, `cos`, and `exp` math paths and reports worst-case Earth-surface
+positional error in meters, with a community dashboard for cross-GPU comparison.
 
-- Benchmark page: `/` (run GPU precision test, then opt-in submit)
-- Dashboard page: `/dashboard` (browse and filter submitted results)
+- Benchmark page: `/` (run WebGL precision benchmark, then optionally share)
+- Dashboard page: `/dashboard` (explore and filter community benchmark results)
 - API: `/api/results` (POST submit, GET list + aggregates)
 
 ## Stack

@@ -57,7 +57,7 @@
     font-size: 11px;
   }
   th {
-    background: #26303a;
+    background: var(--th-bg);
     position: sticky;
     top: 0;
   }

@@ -69,9 +69,11 @@
   void loadData();
 </script>
 
-<h1>GPU Precision Results Dashboard</h1>
+<h1>Community Results</h1>
 <p>
-  Community submissions for the sin/cos precision test. <a href="/">Back to benchmark</a>.
+  Crowdsourced WebGL transcendental function precision results across GPUs and devices for
+  globe-rendering math paths (<code>sin</code>, <code>cos</code>, and <code>exp</code>).
+  <a href="/">Back to benchmark</a>.
 </p>
 
 <Filters bind:gpu bind:precision bind:zoom onApply={applyFilters} />

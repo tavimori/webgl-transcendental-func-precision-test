@@ -1,13 +1,14 @@
 :root {
-  --bg: #101316;
-  --panel: #1b2229;
-  --text: #e7edf3;
-  --muted: #9badbd;
-  --ok: #4ade80;
-  --bad: #f87171;
-  --warn: #fbbf24;
-  --border: #2c3742;
-  --accent: #60a5fa;
+  --bg: #f5f7fa;
+  --panel: #ffffff;
+  --text: #1a2332;
+  --muted: #5f6d7e;
+  --ok: #16a34a;
+  --bad: #dc2626;
+  --warn: #ca8a04;
+  --border: #d5dce6;
+  --accent: #2563eb;
+  --th-bg: #edf0f4;
 }
 
 * {
@@ -40,7 +41,7 @@ a {
 
 button {
   background: var(--accent);
-  color: #000;
+  color: #fff;
   border: none;
   border-radius: 6px;
   padding: 8px 18px;

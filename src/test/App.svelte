@@ -15,6 +15,7 @@
   let status = 'Ready. Click "Run All Analyses" to start.';
   let progress = 0;
   let running = false;
+  let shareResults = true;
   let submitPending = false;
   let submitStatus = "";
   let lastSubmissionId: number | null = null;
@@ -126,6 +127,11 @@
 
       progress = 100;
       status = `Done. ${numSamples.toLocaleString()} samples analyzed.`;
+      if (shareResults) {
+        await submitResults();
+      } else {
+        submitStatus = "Auto-share is disabled. Result was not uploaded.";
+      }
     } catch (error) {
       status = `Error: ${error instanceof Error ? error.message : String(error)}`;
     } finally {
@@ -158,17 +164,26 @@
   }
 </script>
 
-<h1>GPU sin/cos Full-Range Precision Test</h1>
+<h1>WebGL Transcendental Function Precision Test</h1>
 <p>
-  This version is modularized for review and deployment. Run the benchmark, then optionally submit
-  your result to the public dashboard.
+  Tests GPU-side <code>sin</code>, <code>cos</code>, and <code>exp</code> precision across the
+  input ranges used by web map renderers. The direct path evaluates <code>sin</code>/<code>cos</code>
+  for globe-view coordinates, while the exp-algebraic path derives <code>sin</code>/<code>cos</code>
+  from <code>exp</code> for Mercator-to-globe conversion. Results are reported as worst-case
+  Earth-surface positional error in meters.
   <a href="/dashboard">Open dashboard</a>.
 </p>
 
-<Controls bind:zoom bind:tileRes bind:precision bind:running onRun={runTest} />
+<Controls bind:zoom bind:tileRes bind:precision bind:shareResults bind:running onRun={runTest} />
 
 <div class="progress"><div class="progress-bar" style="width: {progress}%"></div></div>
 <div class="mono status">{status}</div>
+{#if submitStatus}
+  <div class="mono submit-status">{submitStatus}</div>
+{/if}
+{#if lastSubmissionId !== null}
+  <div class="mono submit-status">Submission id: {lastSubmissionId}</div>
+{/if}
 
 {#if gpuRenderer}
   <div class="panel mono">GPU: <b>{gpuRenderer}</b> | Vendor: {gpuVendor}</div>
@@ -205,24 +220,6 @@
   </DetailPanel>
 {/if}
 
-{#if payloadForSubmit}
-  <div class="panel">
-    <h2>Share your result</h2>
-    <p>
-      Submission is opt-in. You control whether this benchmark gets uploaded to the shared dataset.
-    </p>
-    <button on:click={submitResults} disabled={submitPending}>
-      {submitPending ? "Submitting..." : "Submit Results"}
-    </button>
-    {#if submitStatus}
-      <div class="submit-status">{submitStatus}</div>
-    {/if}
-    {#if lastSubmissionId !== null}
-      <div class="submit-status mono">Submission id: {lastSubmissionId}</div>
-    {/if}
-  </div>
-{/if}
-
 <style>
   h1 {
     margin: 0 0 8px;
@@ -254,11 +251,6 @@
     margin-bottom: 10px;
   }
 
-  h2 {
-    margin: 0 0 8px;
-    font-size: 18px;
-  }
-
   h3 {
     color: var(--accent);
     font-size: 14px;
@@ -266,7 +258,7 @@
   }
 
   .submit-status {
-    margin-top: 8px;
-    color: var(--text);
+    margin: 4px 0 0;
+    color: var(--muted);
   }
 </style>

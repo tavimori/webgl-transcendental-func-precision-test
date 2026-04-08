@@ -4,6 +4,7 @@
   export let zoom = 13;
   export let tileRes = 512;
   export let precision: GlslPrecision = "highp";
+  export let shareResults = true;
   export let running = false;
 
   export let onRun: () => void;
@@ -38,6 +39,10 @@
   <button on:click={onRun} disabled={running}>
     {running ? "Running..." : "Run All Analyses"}
   </button>
+  <label class="check">
+    <input type="checkbox" bind:checked={shareResults} disabled={running} />
+    Share results to public dashboard
+  </label>
 </div>
 
 <style>
@@ -62,5 +67,14 @@
     border-radius: 4px;
     color: var(--text);
     padding: 6px 8px;
+  }
+
+  .check {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    color: var(--text);
+    font-size: 13px;
+    margin-left: 2px;
   }
 </style>
